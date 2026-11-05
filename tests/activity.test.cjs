@@ -1,0 +1,4 @@
+const{test,before}=require('node:test'),assert=require('node:assert/strict');const{prepareActivityDetector,ActivityDetector}=require('../app/core/activity.cjs');
+before(prepareActivityDetector);
+function fraction(rate,generate){const detector=new ActivityDetector(rate,1);let active=0,count=0;for(let pos=0;pos<rate*8;pos+=1024){const input=Float32Array.from({length:Math.min(1024,rate*8-pos)},(_,n)=>generate(pos+n));if(detector.analyze(input))active++;count++;}detector.destroy();return active/count;}
+test('Smart gate rejects digital silence, low hum and stationary background noise at every capture rate',()=>{for(const rate of[16000,44100,48000]){assert.equal(fraction(rate,()=>0),0);const hum=fraction(rate,n=>.001*Math.sin(2*Math.PI*60*n/rate));assert.ok(hum<.15,`hum ${rate}: ${hum}`);let seed=17;const noise=fraction(rate,()=>{seed=(seed*1664525+1013904223)>>>0;return(seed/4294967295-.5)*.005;});assert.ok(noise<.15,`noise ${rate}: ${noise}`);}});

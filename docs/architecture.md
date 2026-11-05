@@ -1,0 +1,17 @@
+# Architecture
+
+`app/core/` contains platform-independent modules for gating, DC correction, stereo-linked dynamics, CW detection, WAV streaming, privacy filtering, UTC mapping, speech inference and MP4 archival. Tests run with Node's built-in runner, and exercise actual encoded media rather than UI snapshots.
+
+`app/ui/` owns presentation, AudioContext/worklet capture and playback. Every input has its own MediaStream, AudioContext sample clock, recording state, meter and settings. AudioWorklet batches interleaved floats with their absolute source frame. Device identity, operating-system permission requests, and file dialogs are the only platform-dependent boundaries. A silent worklet output keeps capture running without acoustic feedback.
+
+`app/main.cjs` validates a narrow IPC API, owns per-input recorders, local storage, model/encoder subprocesses and library indexing. The renderer has no Node access. It uses an isolated/sandboxed preload and a restricted custom protocol. Audio is streamed with HTTP-style byte ranges so a captured prefix is seekable. File paths accepted from the UI are recording IDs, never arbitrary paths.
+
+Gating observes the DC-corrected input before dynamics. A bundled WebRTC VAD rejects steady ambient noise. Radio/CW tones and distinct high-energy sounds have a separate preservation path. The default 400 ms release and 250 ms pre-roll keep phrase boundaries intact. Noise-floor estimation informs the monitor and signal checks. The pre-roll ring retains only unrecorded samples. Each saved span records source frame boundaries, output frame boundaries and capture-start UTC. The gap-aware timestamp mapper chooses the next span for caption starts and the preceding span for ends at VOX boundaries. Dynamics is zero-delay and therefore needs no timestamp compensation.
+
+The leveler targets -20 dBFS, limits boost, holds gain below the noise floor and applies a 4:1 soft-knee compressor around -18 dBFS. A stereo-linked instant-attack limiter caps PCM peaks at -1 dBFS. Default gain, compressor timing, knee, ratio and limiter behavior require no user setup. This is not a standards-certified broadcast loudness normalizer or true-peak mastering limiter.
+
+Transcription uses a single isolated utility process/queue, preventing neural inference from blocking capture. Excerpts are bounded and resampled to 16 kHz with a windowed-sinc low-pass filter. The provider inspects first-token language logits because the selected runtime otherwise defaults to English. It explicitly requests transcription, never translation. An alternative provider can replace `app/core/speech.mjs` without changing capture/storage/playback.
+
+Completed recordings are encoded to AAC/MP4 via a packaged FFmpeg process. A small H.264 presentation panel renders captions visibly in QuickTime, while an optional standard mov_text track remains embedded; rich metadata is JSON in the comment tag. Source PCM is retained until archive success and transcription completion. Remux operations avoid re-encoding existing AAC. JSON sidecars support recovery and readable inspection. No network service receives recordings.
+
+The current recovery spool is one WAV per input rather than a segmented circular buffer. DVR playback reads the growing file by ranges and refreshes the captured edge. This is desktop time-shift playback, not a network livestream. The 4 GB WAV limit, independent device clocks, storage usage and transcription lag are explicit limitations. A future segmented spool can replace WAVWriter without changing the span/timestamp schema.

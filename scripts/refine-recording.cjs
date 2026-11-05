@@ -1,0 +1,22 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+const{prepareActivityDetector}=require('../app/core/activity.cjs');const{ChannelRecorder,atomicJSON}=require('../app/core/recorder.cjs');const{archive}=require('../app/core/archive.cjs');
+(async()=>{
+ const metaSource=path.resolve(process.argv[2]),folder=path.resolve(process.argv[3]||'output/refined');const original=JSON.parse(fs.readFileSync(metaSource,'utf8'));fs.mkdirSync(folder,{recursive:true});
+ const source=path.join(path.dirname(metaSource),original.mediaFile),raw=path.join(folder,'.refine-input.f32');const{sampleRate,channels}=original.format;
+ const decode=spawnSync(require('ffmpeg-static'),['-v','error','-y','-i',source,'-vn','-map_metadata','-1','-ar',String(sampleRate),'-ac',String(channels),'-f','f32le',raw],{encoding:'utf8'});if(decode.status)throw new Error(decode.stderr);
+ await prepareActivityDetector();const recorder=new ChannelRecorder('input-refined',()=>{});const sourceId=recorder.start({folder,name:original.name,frequency:original.frequency,source:'Refined copy of '+original.source,clockOriginUTC:original.clockOriginUTC,groupId:original.groupId,config:{...original.format,autoGate:true,vox:true,release:.4,dc:false,dynamics:false}});
+ const fd=fs.openSync(raw,'r');try{
+  for(const span of original.spans){
+   for(let frame=span.outputStart;frame<span.outputEnd;){const count=Math.min(1024,span.outputEnd-frame),buffer=Buffer.alloc(count*channels*4);const bytes=fs.readSync(fd,buffer,0,buffer.length,frame*channels*4);if(!bytes)break;const samples=new Float32Array(bytes/4);for(let n=0;n<samples.length;n++)samples[n]=buffer.readFloatLE(n*4);recorder.ingest(samples,span.sourceStart+frame-span.outputStart);frame+=samples.length/channels;}
+  }
+ }finally{fs.closeSync(fd);fs.unlinkSync(raw);}
+ const data=recorder.stop('refinement');data.startedUTC=original.startedUTC;data.endedUTC=original.endedUTC;data.locations=original.locations||[];data.format={...original.format,autoGate:true,release:.4};data.transcription='complete';data.transcriptModel=original.transcriptModel;data.transcribedUTC=original.transcribedUTC;
+ function project(startUTC,endUTC){let first,last;for(const span of data.spans){const spanStart=span.captureStartUTC,spanEnd=spanStart+(span.outputEnd-span.outputStart)/sampleRate*1000;const from=Math.max(startUTC,spanStart),to=Math.min(endUTC,spanEnd);if(from>=to)continue;if(!first)first={position:(span.outputStart+(from-spanStart)*sampleRate/1000)/sampleRate,utc:from};last={position:(span.outputStart+(to-spanStart)*sampleRate/1000)/sampleRate,utc:to};}return first&&last?{start:first.position,end:last.position,startUTC:new Date(first.utc).toISOString(),endUTC:new Date(last.utc).toISOString()}:null;}
+ data.captions=(original.captions||[]).flatMap(c=>{const projection=project(Date.parse(c.startUTC),Date.parse(c.endUTC));return projection?[{...c,...projection,originalStartUTC:c.startUTC,originalEndUTC:c.endUTC}]:[];});
+ data.stationIdentifiers=original.stationIdentifiers||[];data.bookmarks=[];
+ for(const mark of original.bookmarks||[]){const frame=mark.position*sampleRate,span=original.spans.find(s=>frame>=s.outputStart&&frame<s.outputEnd);if(!span)continue;const utc=span.captureStartUTC+(frame-span.outputStart)/sampleRate*1000;const p=project(utc,utc+1000);if(p)data.bookmarks.push({...mark,position:p.start,sourceCaptureUTC:new Date(utc).toISOString()});}
+ data.refinement={sourceRecordingId:original.id,sourceDuration:original.duration,removedSeconds:original.duration-data.duration,processingUTC:new Date().toISOString(),algorithm:'WebRTC speech activity + CW/radio tones; 250 ms pre-roll and 400 ms release',originalPreserved:true};
+ const id=original.id+'__refined';for(const extension of['.wav','.log'])fs.renameSync(path.join(folder,sourceId+extension),path.join(folder,id+extension));fs.unlinkSync(path.join(folder,sourceId+'.json'));data.id=id;data.mediaFile=id+'.wav';data.transcribedThrough=data.duration;const metaFile=path.join(folder,id+'.json');atomicJSON(metaFile,data);await archive({data,file:path.join(folder,data.mediaFile),metaFile});
+ console.log(JSON.stringify({file:path.join(folder,id+'.mp4'),sourceSeconds:original.duration,refinedSeconds:data.duration,removedSeconds:original.duration-data.duration,captions:data.captions.length},null,2));
+})().catch(error=>{console.error(error);process.exitCode=1;});

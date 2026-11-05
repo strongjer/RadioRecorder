@@ -1,0 +1,13 @@
+build/
+.build/
+bundled-models/
+windows-runtime/
+.DS_Store
+node_modules/
+dist/
+test-results/
+output/
+.env
+.env.*
+sr190.zip
+*.log
