@@ -11,3 +11,4 @@ output/
 .env.*
 sr190.zip
 *.log
+:memory:.ses

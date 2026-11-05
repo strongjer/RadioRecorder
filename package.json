@@ -1,7 +1,7 @@
 {
   "name": "radiorecorder",
   "productName": "RadioRecorder",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "A voice-activated recording console for macOS, Windows, and Linux.",
   "author": "RadioRecorder contributors",
@@ -11,9 +11,9 @@
     "test": "node --test tests/*.test.cjs",
     "test:app": "node scripts/smoke.cjs",
     "pack": "electron-builder --dir",
-    "dist:mac": "node scripts/prepare-macos-encoder.cjs && electron-builder --mac dmg zip",
+    "dist:mac": "node scripts/prepare-macos-encoder.cjs && electron-builder --mac dmg zip --publish never",
     "dist:win": "node scripts/build-windows.cjs",
-    "dist:linux": "electron-builder --linux AppImage deb --x64",
+    "dist:linux": "electron-builder --linux AppImage deb --x64 --publish never",
     "postinstall": "node node_modules/electron/install.js",
     "test:captions": "node scripts/live-caption-check.cjs",
     "icons": "node scripts/icons.cjs"
@@ -21,7 +21,9 @@
   "build": {
     "appId": "app.radiorecorder.desktop",
     "asar": true,
-    "toolsets": { "nsis": "1.2.1" },
+    "toolsets": {
+      "nsis": "1.2.1"
+    },
     "files": [
       "app/**/*",
       "package.json",
@@ -58,8 +60,21 @@
       "target": "portable",
       "requestedExecutionLevel": "asInvoker",
       "artifactName": "${productName}-${version}-Windows-${arch}-Portable.${ext}",
-      "extraResources": [{ "from": "bundled-models", "to": "bundled-models" }],
-      "extraFiles": [{ "from": "windows-runtime", "to": "." }],
+      "extraResources": [
+        {
+          "from": "bundled-models",
+          "to": "bundled-models",
+          "filter": [
+            "Xenova/whisper-base/**/*"
+          ]
+        }
+      ],
+      "extraFiles": [
+        {
+          "from": "windows-runtime",
+          "to": "."
+        }
+      ],
       "files": [
         "app/**/*",
         "package.json",
@@ -98,7 +113,8 @@
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",
     "@ozymandiasthegreat/vad": "^2.0.7",
-    "ffmpeg-static": "^5.3.0"
+    "ffmpeg-static": "^5.3.0",
+    "onnxruntime-node": "1.30.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",

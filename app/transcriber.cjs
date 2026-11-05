@@ -4,6 +4,8 @@
 const { readMono16k } = require('./core/wav.cjs');
 const { groupAlignedWords } = require('./core/captions.cjs');
 const { frameToUTC } = require('./core/audio.cjs');
+const { MODEL_ID } = require('./core/model.cjs');
+const { decodeRecordingCW } = require('./core/recording-cw.cjs');
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
@@ -14,7 +16,7 @@ async function load(download) {
   if (pipeline) return;
   const transformers = await import('@huggingface/transformers');
   transformers.env.cacheDir = process.env.SCANNER_MODEL_CACHE;
-  pipeline = await transformers.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', {
+  pipeline = await transformers.pipeline('automatic-speech-recognition', MODEL_ID, {
     dtype: 'q8', device: 'cpu', local_files_only: !download,
     progress_callback: event => send({ type: 'progress', file: event.file, progress: event.progress, status: event.status }),
   });
@@ -38,11 +40,17 @@ process.parentPort.on('message', ({ data }) => {
       }
       try {
       const { transcribeRecording } = await import('./core/recording-transcript.mjs');
+      if(data.finalPass){
+        const recovered=decodeRecordingCW(metadata,file);
+        metadata.stationIdentifiers=[...(metadata.stationIdentifiers||[]).filter(old=>!recovered.some(id=>id.text===old.text&&id.start<old.end&&id.end>old.start)),...recovered].sort((a,b)=>a.start-b.start);
+      }
       const captions = await transcribeRecording(pipeline, metadata, file, {
         rangeStart: data.rangeStart || 0, rangeEnd: data.rangeEnd ?? metadata.duration,
         onProgress: progress => send({type:'transcription-progress',id:metadata.id,progress})
       });
-      send({ type: 'transcribed', id: metadata.id, captions, rangeStart: data.rangeStart || 0, rangeEnd: data.rangeEnd ?? metadata.duration, model: 'Xenova/whisper-tiny', timing: 'word-aligned', finalPass: !!data.finalPass, generatedUTC: new Date().toISOString() });
+      if(data.finalPass)for(const id of metadata.stationIdentifiers||[])captions.push({kind:'cw',text:`[CW station ID candidate: ${id.text}]`,start:id.start,end:id.end,startUTC:id.startUTC,endUTC:id.endUTC});
+      captions.sort((a,b)=>a.start-b.start);
+      send({ type: 'transcribed', id: metadata.id, captions, ...(data.finalPass?{stationIdentifiers:metadata.stationIdentifiers}:{}), rangeStart: data.rangeStart || 0, rangeEnd: data.rangeEnd ?? metadata.duration, model: MODEL_ID, timing: 'word-aligned', finalPass: !!data.finalPass, generatedUTC: new Date().toISOString() });
       } finally { if (decoded) { try { fs.unlinkSync(decoded); } catch {} } }
     } catch (error) { send({ type: 'error', id: data.metadata?.id, message: error.message }); }
   });

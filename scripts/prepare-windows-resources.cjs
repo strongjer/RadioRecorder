@@ -7,7 +7,7 @@ const { promisify } = require('node:util');
 const { getPath7za } = require('app-builder-lib/out/toolsets/7zip');
 const run = promisify(execFile);
 const root = path.resolve(__dirname, '..');
-const revision = '5332fcc35e32a33b86612b9a57a89be7906102b1';
+const { MODEL_ID, MODEL_REVISION: revision } = require('../app/core/model.cjs');
 const modelFiles = ['config.json', 'generation_config.json', 'preprocessor_config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_merged_quantized.onnx'];
 const runtimeSHA = 'cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b';
 const runtimeURL = 'https://download.visualstudio.microsoft.com/download/pr/990c720a-46ce-4dc7-87b9-c2eb615d34b9/' + runtimeSHA.toUpperCase() + '/VC_redist.x64.exe';
@@ -22,21 +22,21 @@ async function download(url, file) {
   await fs.rename(temp, file);
 }
 async function model() {
-  const destination = path.join(root, 'bundled-models', 'Xenova', 'whisper-tiny');
+  const destination = path.join(root, 'bundled-models', ...MODEL_ID.split('/'));
   const source = process.argv[2] && path.resolve(process.argv[2]);
   for (const name of modelFiles) {
     const file = path.join(destination, name);
     await fs.mkdir(path.dirname(file), { recursive: true });
     if (source) await fs.copyFile(path.join(source, name), file);
-    else await download(`https://huggingface.co/Xenova/whisper-tiny/resolve/${revision}/${name}`, file);
+    else await download(`https://huggingface.co/${MODEL_ID}/resolve/${revision}/${name}`, file);
   }
-  await download(`https://huggingface.co/Xenova/whisper-tiny/raw/${revision}/README.md`, path.join(destination, 'MODEL_CARD.md'));
+  await download(`https://huggingface.co/${MODEL_ID}/raw/${revision}/README.md`, path.join(destination, 'MODEL_CARD.md'));
   await fs.copyFile(path.join(root, 'node_modules/@huggingface/transformers/LICENSE'), path.join(destination, 'LICENSE-APACHE-2.0.txt'));
   await download('https://raw.githubusercontent.com/openai/whisper/main/LICENSE', path.join(destination, 'LICENSE-WHISPER.txt'));
   const sha256 = {};
   for (const name of modelFiles) sha256[name] = digest(await fs.readFile(path.join(destination, name)));
-  await fs.writeFile(path.join(destination, 'provenance.json'), JSON.stringify({ model: 'Xenova/whisper-tiny', revision, sha256 }, null, 2) + '\n');
-  console.log('Bundled multilingual Whisper Tiny model.');
+  await fs.writeFile(path.join(destination, 'provenance.json'), JSON.stringify({ model: MODEL_ID, revision, sha256 }, null, 2) + '\n');
+  console.log('Bundled multilingual speech model: ' + MODEL_ID);
 }
 async function runtime() {
   const work = path.join(root, '.build', 'windows-runtime-source');

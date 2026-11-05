@@ -1,6 +1,6 @@
 # Windows x64 portable
 
-[Download RadioRecorder-1.0.1-Windows-x64-Portable.exe](https://github.com/strongjer/RadioRecorder/releases/download/v1.0.1/RadioRecorder-1.0.1-Windows-x64-Portable.exe)
+[Download RadioRecorder-1.0.2-Windows-x64-Portable.exe](https://github.com/strongjer/RadioRecorder/releases/download/v1.0.2/RadioRecorder-1.0.2-Windows-x64-Portable.exe)
 
 Copy the EXE to a 64-bit Windows 10/11 computer and double-click it. No installer or administrator access is required. The audio encoder, speech model, and native runtime libraries are included. The app extracts itself to a temporary folder while running. Recordings are saved separately in Music/RadioRecorder, and preferences in your Windows user profile.
 

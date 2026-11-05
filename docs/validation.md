@@ -24,3 +24,11 @@ The Mac bundle is locally ad-hoc signed, not Developer ID notarized. The Windows
 ## Windows portable build
 
 The standalone EXE contains a complete Electron application, Windows x64 FFmpeg, Sharp/libvips, ONNX Runtime, app-local Microsoft runtime DLLs and multilingual Whisper Tiny weights. The model transcribed the synthetic fixture with remote downloads disabled. PE architecture checks, model SHA-256 verification, clean ASAR contents, extraction of the outer executable, and testing the complete embedded 7z archive all passed. The launcher manifest requests `asInvoker`; no installation or administrator access is required. The Windows binaries cannot be executed natively on this Apple Silicon build host, so Windows microphone access, actual playback/encoding and live inference still require testing on Windows.
+
+## Update 1.0.2
+
+19 core tests pass, including neural speech/noise/CW separation and saved-audio CW recovery after short false tone pulses and a VOX gap. Word alignment passes with both 2-second and 22-second leading silence. Whisper Base transcribes the synthetic English and Spanish fixtures in their original languages. The speech detector also retains synthetic voice attenuated to 3% and 1% of its original level.
+
+The final pass now uses continuous Silero speech evidence, acoustic context across VOX spans, Whisper no-speech probabilities and adaptive CW timing. Captions unsupported by speech evidence are omitted. A locally reprocessed recording recovered a missed CW identifier and removed captions invented over tones/noise. Its AAC audio packet hash is identical to the original. The private recording is excluded from source and packages; public regression coverage uses generated audio only.
+
+The updated packaged Mac utility process passed local inference, word alignment, MP4 caption/metadata export and MP4-only retry. The Mac signature verifies. Windows native libraries and bundled model checksums verify; physical Windows UI/microphone testing remains outstanding. The original 1.0.1 Windows-host engine tests passed in GitHub Actions; its verification script had a Windows path-separator error, corrected in 1.0.2. CPU-only CI setup now skips optional CUDA downloads and packaging explicitly avoids implicit release publication.

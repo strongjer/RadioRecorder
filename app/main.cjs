@@ -10,6 +10,7 @@ const { settings } = require('./core/audio.cjs');
 const { archive, readEmbeddedMetadata } = require('./core/archive.cjs');
 const { sanitizeLocation } = require('./core/location.cjs');
 const { prepareActivityDetector } = require('./core/activity.cjs');
+const { MODEL_ID } = require('./core/model.cjs');
 protocol.registerSchemesAsPrivileged([{ scheme: 'scanner', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 if (process.env.SCANNER_TEST_HOME) app.setPath('userData', process.env.SCANNER_TEST_HOME);
 let window, preferences, preferenceFile, worker, blocker;
@@ -17,7 +18,7 @@ let downloading = false, shuttingDown = false;
 const channels = new Map(), library = new Map();
 const archiving = new Set(), archiveAgain = new Set(), pendingTranscription = new Map();
 const bundledModels = path.join(process.resourcesPath, 'bundled-models');
-const hasBundledModel = fs.existsSync(path.join(bundledModels, 'Xenova', 'whisper-tiny', 'onnx', 'decoder_model_merged_quantized.onnx'));
+const hasBundledModel = fs.existsSync(path.join(bundledModels, ...MODEL_ID.split('/'), 'onnx', 'decoder_model_merged_quantized.onnx'));
 async function finalize(id) {
   if (archiving.has(id)) { archiveAgain.add(id); return; }
   archiving.add(id);
@@ -70,7 +71,8 @@ function getWorker() {
       try {
         const entry = item(message.id);
         if (message.type === 'transcribed') {
-          entry.data.captions = [...(entry.data.captions || []).filter(c => c.kind === 'cw' || c.start < (message.rangeStart || 0)), ...message.captions].sort((a, b) => a.start - b.start);
+          entry.data.captions = [...(entry.data.captions || []).filter(c => (c.kind === 'cw'&&!message.finalPass) || c.start < (message.rangeStart || 0)), ...message.captions].sort((a, b) => a.start - b.start);
+          if(message.stationIdentifiers)entry.data.stationIdentifiers=message.stationIdentifiers;
           entry.data.transcribedThrough = message.rangeEnd; if(message.finalPass)entry.data.needsFinalAlignment=false;entry.data.captionTiming=message.timing;entry.data.transcription = entry.data.status === 'recording' ? 'partial' : entry.data.needsFinalAlignment ? 'queued' : 'complete'; entry.data.transcriptModel = message.model; entry.data.transcribedUTC = message.generatedUTC;
           const active = [...channels.values()].find(c => c.session?.id === message.id);
           if (active) Object.assign(active.session, { captions: entry.data.captions, transcribedThrough: message.rangeEnd, transcription: 'partial' });
@@ -123,7 +125,8 @@ app.whenReady().then(async () => {
   const folder = process.env.SCANNER_TEST_HOME ? path.join(process.env.SCANNER_TEST_HOME, 'Recordings') : path.join(app.getPath('music'), 'RadioRecorder');
   preferences = { folder, folders: [folder], modelReady: false, autoTranscribe: true, inputs: [{ id: 'input-1', name: 'Main receiver', frequency: '', deviceId: 'default', config: settings() }] };
   try { preferences = { ...preferences, ...JSON.parse(fs.readFileSync(preferenceFile, 'utf8')) }; } catch {}
-  if(preferences.modelId!=='Xenova/whisper-tiny'){preferences.modelReady=false;preferences.modelId='Xenova/whisper-tiny';persist();}
+  if(preferences.modelId!==MODEL_ID){preferences.modelReady=false;preferences.modelId=MODEL_ID;persist();}
+  if(fs.existsSync(path.join(app.getPath('userData'),'models',...MODEL_ID.split('/'),'onnx','decoder_model_merged_quantized.onnx'))){preferences.modelReady=true;persist();}
   if (hasBundledModel) { preferences.modelReady = true; persist(); }
   if (!preferences.captureDefaultsVersion) {
     for (const input of preferences.inputs) if (input.config?.sampleRate === 48000 && input.config?.channels === 1) input.config.sampleRate = 16000;

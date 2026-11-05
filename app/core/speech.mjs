@@ -11,7 +11,10 @@ export async function detectLanguage(pipe, audio) {
  let best=-Infinity, token='<|en|>', total=0;
  for(const [language,id]of Object.entries(languages))if(logits[id]>best){best=logits[id];token=language;}
  for(const id of Object.values(languages))total+=Math.exp(logits[id]-best);
- const result={language:token.slice(2,-2),confidence:1/total};
+ let maximum=-Infinity;for(const value of logits)maximum=Math.max(maximum,value);
+ let denominator=0;for(const value of logits)denominator+=Math.exp(value-maximum);
+ const noSpeechToken=pipe.tokenizer.convert_tokens_to_ids('<|nocaptions|>');
+ const result={language:token.slice(2,-2),confidence:1/total,noSpeechProbability:Number.isInteger(noSpeechToken)?Math.exp(logits[noSpeechToken]-maximum)/denominator:0};
  const visited=new Set();function dispose(value){if(!value||typeof value!=='object'||visited.has(value))return;visited.add(value);if(value instanceof Tensor)value.dispose();else for(const child of Object.values(value))dispose(child);}
  dispose(output);dispose(features);dispose(ids);
  return result;
@@ -19,7 +22,9 @@ export async function detectLanguage(pipe, audio) {
 export async function transcribe(pipe,audio,language='auto'){
  let energy=0;for(const sample of audio)energy+=sample*sample;
  if(energy/Math.max(1,audio.length)<Math.pow(10,-65/10))return{text:'',chunks:[],language:null,languageConfidence:0};
- const detected=language==='auto'?await detectLanguage(pipe,audio):{language,confidence:1};
+ const analysis=await detectLanguage(pipe,audio);
+ if(analysis.noSpeechProbability>.6)return{text:'',chunks:[],language:null,languageConfidence:0,noSpeechProbability:analysis.noSpeechProbability};
+ const detected=language==='auto'?analysis:{...analysis,language,confidence:1};
  const output=await pipe(audio,{language:detected.language,task:'transcribe',return_timestamps:'word',chunk_length_s:30,stride_length_s:0,max_length:448,no_repeat_ngram_size:8});
- return{...output,timing:'word-aligned',language:detected.language,languageConfidence:detected.confidence};
+ return{...output,timing:'word-aligned',language:detected.language,languageConfidence:detected.confidence,noSpeechProbability:analysis.noSpeechProbability};
 }

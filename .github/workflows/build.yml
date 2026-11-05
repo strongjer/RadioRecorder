@@ -1,4 +1,6 @@
 name: Build RadioRecorder
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
 on:
   workflow_dispatch:
   push:
@@ -27,12 +29,45 @@ jobs:
       - run: npm run dist:${{ matrix.target }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Check the Mac package and signature
+        if: matrix.target == 'mac'
+        shell: bash
+        run: |
+          RR_ARCH=$(node -p 'process.arch')
+          node scripts/verify-package.cjs "dist/mac-${RR_ARCH}/RadioRecorder.app/Contents/Resources/app.asar"
+          codesign --verify --deep --strict "dist/mac-${RR_ARCH}/RadioRecorder.app"
+      - name: Check packaged Windows inference and MP4 archival
+        if: matrix.target == 'win'
+        run: node scripts/check-packaged-inference.cjs dist/windows-portable/win-unpacked
       - uses: actions/upload-artifact@v4
         with:
           name: RadioRecorder-${{ matrix.target }}
           path: |
-            dist/**/*.dmg
-            dist/**/*.zip
-            dist/**/*.exe
-            dist/**/*.AppImage
-            dist/**/*.deb
+            dist/*.dmg
+            dist/*.zip
+            dist/windows-portable/*-Portable.exe
+            dist/*.AppImage
+            dist/*.deb
+  publish:
+    if: always() && startsWith(github.ref, 'refs/tags/v')
+    needs: desktop
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: RadioRecorder-mac
+          path: .build/release-builds/mac
+      - uses: actions/download-artifact@v4
+        with:
+          name: RadioRecorder-win
+          path: .build/release-builds/windows
+      - name: Publish the checked native builds
+        run: node scripts/publish-release.cjs
+        env:
+          GH_TOKEN: ${{ github.token }}
