@@ -65,4 +65,4 @@ The live recovery WAV has a 4 GB RIFF limit; the channel stops safely with a mes
 - [Broadcastify Calls](https://support.broadcastify.com/hc/en-us/articles/18460873419675-Broadcastify-Calls-Listening): individual transmissions and archive playback.
 - [Citizen incident timeline](https://support.citizen.com/hc/en-us/articles/34348472620695-Incidents): searchable time-centered activity. No Citizen or Broadcastify account, data, or service is integrated.
 
-Third-party components retain their licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). See [docs/architecture.md](docs/architecture.md) for module boundaries.
+Third-party components retain their licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). See [architecture](docs/architecture.md) for module boundaries, [design decisions](docs/decisions.md) for requirements and rationale, [validation](docs/validation.md) for evidence and limitations, and [maintenance](docs/maintenance.md) for rebuilding, releases, and safe reprocessing.
